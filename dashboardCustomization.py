@@ -27,8 +27,9 @@ def update_nested_dict(in_dict, key, value):
                 if isinstance(o, dict):
                     update_nested_dict(o, key, value)
 
-# initialize quicksight
+# initialize client
 qs_client = boto3.client('quicksight')
+s3_client = boto3.client('s3')
 
 # initialize the variables
 aws_account_id = '733585711144'
@@ -49,8 +50,16 @@ target_dashboard_name = 'Strategic'
 dashboard_definition = qs_client.describe_dashboard_definition(AwsAccountId=aws_account_id, DashboardId=dashboard_id)
 
 # Optional: download dashboard definition
+json_object = json.dumps(dashboard_definition, indent=4)
 with open('./enterpriseDashboard.json', "w") as outfile:
-    json.dump(dashboard_definition, outfile, indent=4)
+    outfile.write(json_object)
+
+# Optional: upload json object to S3
+s3_client.put_object(
+    Bucket='aac-bucket-vs', 
+    Key=f'definition_files/{dashboard_id}.json',
+    Body=json_object
+)
 
 # creating object dictionaries
 dataset_dict = dashboard_definition['Definition']['DataSetIdentifierDeclarations'][0]
@@ -75,8 +84,16 @@ for visual in visuals_in_sheet:
         continue
 
 # Optional: download the target definition
+json_object = json.dumps(dashboard_definition, indent=4)
 with open('./modifiedJson.json', 'w') as outfile:
-    json.dump(dashboard_definition, outfile, indent=4)
+    json.dumps(json_object)
+
+# Optional: upload json object to S3
+s3_client.put_object(
+    Bucket='aac-bucket-vs', 
+    Key=f'definition_files/{target_dashboard_id}.json',
+    Body=json_object
+)
 
 # get dashboard permissions
 dashboard_permissions = qs_client.describe_dashboard_permissions(AwsAccountId=aws_account_id, DashboardId=dashboard_id)['Permissions']
