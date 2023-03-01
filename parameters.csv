@@ -1,0 +1,3 @@
+customerName,logoUrl,no_of_datasets,source_dataset_ids,target_dataset_ids,target_analysis_and_dashboard_id,target_analysis_and_dashboard_name
+aws,https://tiny.amazon.com/uacdsk8x/custs3useaamazlogoawslpng,2,73bc8139-ef40-45f2-bec9-533a0b539f21;c4ee59fc-86e9-4944-8714-16e02a1eceb7,ad1ade97-1f25-42ea-8e86-07d7139ef147;d37d500f-6a3d-46f6-a911-b6ddc453df2e,aws,AWS
+audible,https://tiny.amazon.com/135b6c3si/custs3useaamazlogoaudijpg,2,73bc8139-ef40-45f2-bec9-533a0b539f21;c4ee59fc-86e9-4944-8714-16e02a1eceb7,d51350ff-077a-425c-81d3-f04acb19235c;4e183c7c-68f3-44b8-adee-989d5044cf73,audible,Audible

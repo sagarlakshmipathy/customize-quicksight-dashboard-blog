@@ -4,9 +4,20 @@
 # import statements
 import boto3
 import json
-import time
+import pandas as pd
 
-def update_nested_dict(in_dict, key, value):
+# initialize client
+qs_client = boto3.client('quicksight')
+s3_client = boto3.client('s3')
+
+# user supplied variables
+aws_account_id = '733585711144'
+region = 'us-east-1'
+dashboard_id = '9b55e360-306e-4d27-8bb2-22e46c931701'
+sheet_id = '9b55e360-306e-4d27-8bb2-22e46c931701_fc141d89-cb07-4619-a7a5-50d9ebd5d85b'
+visual_id = '9b55e360-306e-4d27-8bb2-22e46c931701_200b48d4-7e56-4745-ad2f-ee976978f3d6'
+
+def update_nested_dict(in_dict, key, value, match_value=None):
     """Replaces the existing value of the key with a new value
 
     Args:
@@ -18,95 +29,150 @@ def update_nested_dict(in_dict, key, value):
         doesn't return anything but updates the dictionary in place
     """
     for k, v in in_dict.items():
-        if key == k:
+        if key == k and v == match_value:
             in_dict[k] = value
         elif isinstance(v, dict):
-            update_nested_dict(v, key, value)
+            update_nested_dict(v, key, value, match_value)
         elif isinstance(v, list):
             for o in v:
                 if isinstance(o, dict):
-                    update_nested_dict(o, key, value)
+                    update_nested_dict(o, key, value, match_value)
 
-# initialize client
-qs_client = boto3.client('quicksight')
-s3_client = boto3.client('s3')
+# extracted values
+analysis_sheet_id = sheet_id.split('_')[-1]
+analysis_visual_id = visual_id.split('_')[-1]
 
-# initialize the variables
-aws_account_id = '733585711144'
-region = 'us-east-1'
-dashboard_id = 'd280fdec-2adf-45bb-813d-cceece251ec3'
-target_dataset_id = 'b40f8cfd-adb1-40c4-b972-b4a0289d7a56'
-target_dataset_identifier = 'Strategic'
-target_dataset_arn = f'arn:aws:quicksight:{region}:{aws_account_id}:dataset/{target_dataset_id}'
-sheet_id = 'd280fdec-2adf-45bb-813d-cceece251ec3_642ba41e-f491-4357-bf4a-a2d4eb9638bc'
-visual_id = 'd280fdec-2adf-45bb-813d-cceece251ec3_52d335ed-bbbc-46bd-98d6-000c81a214e6'
-replacement_url = 'https://tiny.amazon.com/1dz1oyrsy/aacbs3useaamazawspng'
+# downloading the file from S3 bucket and reading the csv file
+s3_client.download_file('customize-dashboard-blogwork', 'parameters/customization_parameters.csv', './parameters.csv')
+df = pd.read_csv('./parameters.csv')
 
-# user defined target dashboard parameters
-target_dashboard_id = 'StrategicDashboard'
-target_dashboard_name = 'Strategic'
+for index, deployment in enumerate(df.iterrows()):
+    customer_name = df['customerName'].tolist()[index]
+    replacement_url = df['logoUrl'].tolist()[index]
+    number_of_datasets = df['no_of_datasets'].tolist()[index]
+    source_dataset_id_list = df['source_dataset_ids'].tolist()[index].split(';')
+    target_dataset_id_list = df['target_dataset_ids'].tolist()[index].split(';')
+    target_analysis_id = target_dashboard_id = df['target_analysis_and_dashboard_id'].tolist()[index]
+    target_analysis_name = target_dashboard_name = df['target_analysis_and_dashboard_name'].tolist()[index]
 
-# describe dashboard definition
-dashboard_definition = qs_client.describe_dashboard_definition(AwsAccountId=aws_account_id, DashboardId=dashboard_id)
+    # derived values
+    if target_dataset_id_list:
+        source_dataset_identifier_list  = []
+        for dataset_id in source_dataset_id_list:
+            source_dataset_identifier_list.append(qs_client.describe_data_set(AwsAccountId=aws_account_id, DataSetId=dataset_id)['DataSet']['Name'])
 
-# Optional: download dashboard definition
-json_object = json.dumps(dashboard_definition, indent=4)
-with open('./enterpriseDashboard.json', "w") as outfile:
-    outfile.write(json_object)
+        target_dataset_identifier_list = []
+        for dataset_id in target_dataset_id_list:
+            target_dataset_identifier_list.append(qs_client.describe_data_set(AwsAccountId=aws_account_id, DataSetId=dataset_id)['DataSet']['Name'])
 
-# Optional: upload json object to S3
-s3_client.put_object(
-    Bucket='aac-bucket-vs', 
-    Key=f'definition_files/{dashboard_id}.json',
-    Body=json_object
-)
+        source_dataset_arn_list = []
+        for dataset_id in source_dataset_id_list:
+            source_dataset_arn_list.append(f'arn:aws:quicksight:{region}:{aws_account_id}:dataset/{dataset_id}')
 
-# creating object dictionaries
-dataset_dict = dashboard_definition['Definition']['DataSetIdentifierDeclarations'][0]
-sheets_dict = dashboard_definition['Definition']['Sheets']
-for sheet in sheets_dict:
-    if sheet['SheetId'] == sheet_id:
-        visuals_in_sheet = sheet['Visuals']
-        break
+        target_dataset_arn_list = []
+        for dataset_id in target_dataset_id_list:
+            target_dataset_arn_list.append(f'arn:aws:quicksight:{region}:{aws_account_id}:dataset/{dataset_id}')
 
-# update dataset name and arn in the definition
-update_nested_dict(dataset_dict, 'Identifier', target_dataset_identifier)
-update_nested_dict(dataset_dict, 'DataSetArn', target_dataset_arn)
-update_nested_dict(dashboard_definition, 'DataSetIdentifier', target_dataset_identifier)
-
-# update visual URL in target definition
-for visual in visuals_in_sheet:
-    try:
-       if visual['CustomContentVisual']['VisualId'] == visual_id:
-        visual['CustomContentVisual']['ChartConfiguration']['ContentUrl'] = replacement_url
-
-    except KeyError:
-        continue
-
-# Optional: download the target definition
-json_object = json.dumps(dashboard_definition, indent=4)
-with open('./modifiedJson.json', 'w') as outfile:
-    json.dumps(json_object)
-
-# Optional: upload json object to S3
-s3_client.put_object(
-    Bucket='aac-bucket-vs', 
-    Key=f'definition_files/{target_dashboard_id}.json',
-    Body=json_object
-)
-
-# get dashboard permissions
-dashboard_permissions = qs_client.describe_dashboard_permissions(AwsAccountId=aws_account_id, DashboardId=dashboard_id)['Permissions']
-
-# create target dashboard
-qs_client.create_dashboard(
-        AwsAccountId=aws_account_id,
-        DashboardId=target_dashboard_id,
-        Name=target_dashboard_name,
-        Definition=dashboard_definition['Definition'],
-        Permissions=dashboard_permissions
+    #describe analysis definition
+    source_analysis_arn = qs_client.describe_dashboard(
+        AwsAccountId=aws_account_id, 
+        DashboardId=dashboard_id
+    )['Dashboard']['Version']['SourceEntityArn']
+    source_analysis_id = source_analysis_arn.split('/')[-1]
+    analysis_definition = qs_client.describe_analysis_definition(
+        AwsAccountId=aws_account_id, 
+        AnalysisId=source_analysis_id
     )
 
+    # creating object dictionaries
+    (analysis_definition['Definition']['DataSetIdentifierDeclarations']).sort(key=lambda k: k['Identifier'])
+    dataset_dict = analysis_definition['Definition']['DataSetIdentifierDeclarations']
+    sheets_dict = analysis_definition['Definition']['Sheets']
+    for sheet in sheets_dict:
+        if sheet['SheetId'] == analysis_sheet_id:
+            visuals_in_sheet = sheet['Visuals']
+            break
+
+    # Optional: download dashboard definition
+    # json_object = json.dumps(analysis_definition, indent=4)
+    # with open('./source_analysis_definition.json', "w") as outfile:
+    #     outfile.write(json_object)
+
+    # Optional: upload json object to S3
+    # s3_client.put_object(
+    #     Bucket='aac-bucket-vs', 
+    #     Key=f'definition_files/{dashboard_id}.json',
+    #     Body=json_object
+    # )
+
+    # update dataset identifier and arn in the dataset definition
+    if target_dataset_id_list:
+        try:
+            for number, (source_dataset_identifier, target_dataset_identifier) in enumerate(zip(source_dataset_identifier_list, target_dataset_identifier_list)):
+                update_nested_dict(dataset_dict[number], 'Identifier', target_dataset_identifier, source_dataset_identifier)
+                update_nested_dict(dataset_dict[number], 'DataSetArn', target_dataset_arn_list[number], source_dataset_arn_list[number])
+        except IndexError:
+            pass
+
+    # update dataset identifier for the rest of the dashboard definition
+    if target_dataset_id_list:
+        for source_dataset_identifier, target_dataset_identifier in zip(source_dataset_identifier_list, target_dataset_identifier_list):
+            update_nested_dict(analysis_definition, 'DataSetIdentifier', target_dataset_identifier, source_dataset_identifier)
+
+    # update visual URL in target definition
+    for visual in visuals_in_sheet:
+        try:
+           if visual['CustomContentVisual']['VisualId'] == analysis_visual_id:
+            visual['CustomContentVisual']['ChartConfiguration']['ContentUrl'] = replacement_url
+
+        except KeyError:
+            continue
+
+    # Optional: download the target definition
+    # json_object = json.dumps(analysis_definition, indent=4, default=str)
+    # with open(f'./target_analysis_definition-{index+1}.json', 'w') as outfile:
+    #     outfile.write(json_object)
+
+    # Optional: upload json object to S3
+    # s3_client.put_object(
+    #     Bucket='aac-bucket-vs', 
+    #     Key=f'definition_files/{target_dashboard_id}.json',
+    #     Body=json_object
+    # )
+
+    # delete target dashboard if it exists
+    try:
+        qs_client.delete_dashboard(AwsAccountId=aws_account_id, DashboardId=target_dashboard_id)
+        qs_client.delete_analysis(AwsAccountId=aws_account_id, AnalysisId=target_analysis_id)
+    except:
+        pass
+
+    # get permissions
+    analysis_permissions = qs_client.describe_analysis_permissions(
+        AwsAccountId=aws_account_id,
+        AnalysisId=source_analysis_id
+    )['Permissions']
+    dashboard_permissions = qs_client.describe_dashboard_permissions(
+        AwsAccountId=aws_account_id, 
+        DashboardId=dashboard_id
+    )['Permissions']
+
+    # create target dashboard
+    qs_client.create_analysis(
+        AwsAccountId=aws_account_id,
+        AnalysisId=target_analysis_id,
+        Name=target_analysis_name,
+        Definition=analysis_definition['Definition'],
+        Permissions=analysis_permissions
+    )
+    qs_client.create_dashboard(
+            AwsAccountId=aws_account_id,
+            DashboardId=target_dashboard_id,
+            Name=target_dashboard_name,
+            Definition=analysis_definition['Definition'],
+            Permissions=dashboard_permissions
+        )
+
 # Optional: check dashboard status
-time.sleep(2)
-print(qs_client.describe_dashboard(AwsAccountId=aws_account_id, DashboardId=target_dashboard_id))
+# time.sleep(2)
+# print(qs_client.describe_dashboard(AwsAccountId=aws_account_id, DashboardId=target_dashboard_id))
