@@ -16,6 +16,9 @@ region = 'us-east-1'
 dashboard_id = '9b55e360-306e-4d27-8bb2-22e46c931701'
 sheet_id = '9b55e360-306e-4d27-8bb2-22e46c931701_fc141d89-cb07-4619-a7a5-50d9ebd5d85b'
 visual_id = '9b55e360-306e-4d27-8bb2-22e46c931701_200b48d4-7e56-4745-ad2f-ee976978f3d6'
+bucket_name = 'customize-dashboard-blogwork'
+file_path = 'parameters/customization_parameters.csv'
+key = './parameters.csv'
 
 def update_nested_dict(in_dict, key, value, match_value=None):
     """Replaces the existing value of the key with a new value
@@ -43,8 +46,8 @@ analysis_sheet_id = sheet_id.split('_')[-1]
 analysis_visual_id = visual_id.split('_')[-1]
 
 # downloading the file from S3 bucket and reading the csv file
-s3_client.download_file('customize-dashboard-blogwork', 'parameters/customization_parameters.csv', './parameters.csv')
-df = pd.read_csv('./parameters.csv')
+s3_client.download_file(bucket_name, file_path, key)
+df = pd.read_csv(key)
 
 for index, deployment in enumerate(df.iterrows()):
     customer_name = df['customerName'].tolist()[index]
