@@ -3,8 +3,8 @@
 
 # import statements
 import boto3
-# import json
 import pandas as pd
+import json
 import io
 
 # initialize client
@@ -19,7 +19,6 @@ sheet_id = '9b55e360-306e-4d27-8bb2-22e46c931701_fc141d89-cb07-4619-a7a5-50d9ebd
 visual_id = '9b55e360-306e-4d27-8bb2-22e46c931701_200b48d4-7e56-4745-ad2f-ee976978f3d6'
 bucket_name = 'customize-dashboard-blogwork'
 s3_file_path = 'parameters/customization_parameters.csv'
-local_file_name = './parameters.csv'
 
 def update_nested_dict(in_dict, key, value, match_value=None):
     """Replaces the existing value of the key with a new value
